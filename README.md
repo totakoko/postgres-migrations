@@ -1,3 +1,5 @@
+> :warning: Forked from [ThomWright/postgres-migrations](ThomWright/postgres-migrations) to allow configuring the migration table name.
+
 # Postgres migrations
 
 ![GitHub Actions](https://github.com/ThomWright/postgres-migrations/actions/workflows/node.js.yml/badge.svg)
