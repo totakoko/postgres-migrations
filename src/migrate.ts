@@ -38,6 +38,8 @@ export async function migrate(
           //
         }
 
+  const migrationTableName = config.migrationTableName ?? "migrations"
+
   if (dbConfig == null) {
     throw new Error("No config object")
   }
@@ -45,13 +47,17 @@ export async function migrate(
   if (typeof migrationsDirectory !== "string") {
     throw new Error("Must pass migrations directory as a string")
   }
-  const intendedMigrations = await loadMigrationFiles(migrationsDirectory, log)
+  const intendedMigrations = await loadMigrationFiles(
+    migrationsDirectory,
+    log,
+    migrationTableName,
+  )
 
   if ("client" in dbConfig) {
     // we have been given a client to use, it should already be connected
     return withAdvisoryLock(
       log,
-      runMigrations(intendedMigrations, log),
+      runMigrations(intendedMigrations, log, migrationTableName),
     )(dbConfig.client)
   }
 
@@ -99,18 +105,23 @@ export async function migrate(
 
     const runWith = withConnection(
       log,
-      withAdvisoryLock(log, runMigrations(intendedMigrations, log)),
+      withAdvisoryLock(
+        log,
+        runMigrations(intendedMigrations, log, migrationTableName),
+      ),
     )
 
     return runWith(client)
   }
 }
 
-function runMigrations(intendedMigrations: Array<Migration>, log: Logger) {
+function runMigrations(
+  intendedMigrations: Array<Migration>,
+  log: Logger,
+  migrationTableName: string,
+) {
   return async (client: BasicPgClient) => {
     try {
-      const migrationTableName = "migrations"
-
       log("Starting migrations")
 
       const appliedMigrations = await fetchAppliedMigrationFromDB(
@@ -202,12 +213,9 @@ function logResult(completedMigrations: Array<Migration>, log: Logger) {
 
 /** Check whether table exists in postgres - http://stackoverflow.com/a/24089729 */
 async function doesTableExist(client: BasicPgClient, tableName: string) {
-  const result = await client.query(SQL`SELECT EXISTS (
-  SELECT 1
-  FROM   pg_catalog.pg_class c
-  WHERE  c.relname = ${tableName}
-  AND    c.relkind = 'r'
-);`)
+  const result = await client.query(SQL`
+    SELECT to_regclass(${tableName}) as matching_tables;
+  `)
 
-  return result.rows.length > 0 && result.rows[0].exists
+  return result.rows.length > 0 && result.rows[0].matching_tables !== null
 }

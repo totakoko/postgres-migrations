@@ -1,6 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import {promisify} from "util"
+import {loadInitialMigration} from "./initial-migration"
 import {loadMigrationFile} from "./migration-file"
 import {Logger, Migration} from "./types"
 import {validateMigrationOrdering} from "./validation"
@@ -21,6 +22,7 @@ export const loadMigrationFiles = async (
   directory: string,
   // tslint:disable-next-line no-empty
   log: Logger = () => {},
+  migrationTableName: string,
 ): Promise<Array<Migration>> => {
   log(`Loading migrations from: ${directory}`)
 
@@ -31,17 +33,20 @@ export const loadMigrationFiles = async (
     return []
   }
 
-  const migrationFiles = [
-    path.join(__dirname, "migrations/0_create-migrations-table.sql"),
-    ...fileNames.map((fileName) => path.resolve(directory, fileName)),
-  ].filter(isValidFile)
+  const migrationFiles = fileNames
+    .map((fileName) => path.resolve(directory, fileName))
+    .filter(isValidFile)
 
   const unorderedMigrations = await Promise.all(
     migrationFiles.map(loadMigrationFile),
   )
 
+  const initialMigration = await loadInitialMigration(migrationTableName)
+
   // Arrange in ID order
-  const orderedMigrations = unorderedMigrations.sort((a, b) => a.id - b.id)
+  const orderedMigrations = [initialMigration, ...unorderedMigrations].sort(
+    (a, b) => a.id - b.id,
+  )
 
   validateMigrationOrdering(orderedMigrations)
 
